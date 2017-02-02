@@ -238,7 +238,6 @@ src="/report/barcode/Code128/' + self.chave_nfe + '" />'
             'vOutro': "%.02f" % item.outras_despesas
             if item.outras_despesas else '',
             'indTot': item.indicador_total,
-            'cfop': item.cfop,
             'CEST': re.sub('[^0-9]', '', item.cest or ''),
         }
         di_vals = []
