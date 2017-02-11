@@ -642,7 +642,7 @@ src="/report/barcode/Code128/' + self.chave_nfe + '" />'
         certificado = Certificado(cert_pfx, self.company_id.nfe_a1_password)
 
         resposta_recibo = None
-        resposta = autorizar_nfe(certificado, **lote)
+        resposta = autorizar_nfe(certificado, self.model, **lote)
         retorno = resposta['object'].Body.nfeAutorizacaoLoteResult.retEnviNFe
         if retorno.cStat == 103:
             obj = {
@@ -657,7 +657,7 @@ src="/report/barcode/Code128/' + self.chave_nfe + '" />'
             import time
             while True:
                 time.sleep(2)
-                resposta_recibo = retorno_autorizar_nfe(certificado, **obj)
+                resposta_recibo = retorno_autorizar_nfe(certificado, self.model, **obj)
                 retorno = resposta_recibo['object'].Body.\
                     nfeRetAutorizacaoLoteResult.retConsReciNFe
                 if retorno.cStat != 105:
