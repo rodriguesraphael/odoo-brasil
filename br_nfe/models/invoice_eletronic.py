@@ -588,6 +588,9 @@ src="/report/barcode/Code128/' + self.chave_nfe + '" />'
             'exporta': exporta,
             'compra': compras,
         }
+        #eliminar dados do destinatario caso nao seja informado cpf/cnpj
+        if dest['cnpj_cpf'] == '':
+            del vals['dest']
         if len(duplicatas) > 0:
             vals['cobr'] = cobr
         return vals
