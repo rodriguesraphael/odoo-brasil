@@ -240,9 +240,9 @@ class InvoiceEletronic(models.Model):
         if partner.is_company and not partner.legal_name:
             errors.append(u'Destinatário - Razão Social')
 
-        if partner.country_id.id == company.partner_id.country_id.id and self.model != '65':
-            if not partner.cnpj_cpf:
-                errors.append(u'Destinatário - CNPJ/CPF')
+        #if partner.country_id.id == company.partner_id.country_id.id and self.model != '65':
+        #    if not partner.cnpj_cpf:
+        #        errors.append(u'Destinatário - CNPJ/CPF')
 
         if not partner.street:
             errors.append(u'Destinatário / Endereço - Logradouro')

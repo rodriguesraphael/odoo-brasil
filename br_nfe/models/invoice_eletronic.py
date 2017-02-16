@@ -220,7 +220,8 @@ src="/report/barcode/Code128/' + self.chave_nfe + '" />'
         prod = {
             'cProd': item.product_id.default_code,
             'cEAN': item.product_id.barcode or '',
-            'xProd': item.product_id.name,
+            'xProd': 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO -\
+ SEM VALOR FISCAL' if self.ambiente == 'homologacao' else item.product_id.name,
             'NCM': re.sub('[^0-9]', '', item.ncm or '')[:8],
             'EXTIPI': re.sub('[^0-9]', '', item.ncm or '')[8:],
             'CFOP': item.cfop,
@@ -241,6 +242,7 @@ src="/report/barcode/Code128/' + self.chave_nfe + '" />'
             'cfop': item.cfop,
             'CEST': re.sub('[^0-9]', '', item.cest or ''),
         }
+        
         di_vals = []
         for di in item.import_declaration_ids:
             adicoes = []

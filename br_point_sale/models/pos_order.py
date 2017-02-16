@@ -28,6 +28,7 @@ class PosOrder(models.Model):
                 order.total_pis += product.valor_pis
                 order.total_cofins += product.valor_cofins
 
+
     @api.model
     def _process_order(self, pos_order):
         num_controle = int(''.join([str(SystemRandom().randrange(9))
@@ -37,11 +38,15 @@ class PosOrder(models.Model):
         if not res.fiscal_position_id:
             res.fiscal_position_id = \
                 res.session_id.config_id.default_fiscal_position_id.id
+        #for line in res.lines:
+        #    ncm = line.product_id.fiscal_classification_id
+        #    fiscal_classification_id = ncm.id
+        #    line.update({'fiscal_classification_id' : fiscal_classification_id})
         for line in res.lines:
             values = line.order_id.fiscal_position_id.map_tax_extra_values(
                 line.company_id, line.product_id,
                 line.order_id.partner_id)
-
+            
             empty = self.env['account.tax'].browse()
             tax_ids = values.get('tax_icms_id', empty) | \
                 values.get('tax_icms_st_id', empty) | \
@@ -56,6 +61,7 @@ class PosOrder(models.Model):
 
             other_taxes = line.tax_ids.filtered(lambda x: not x.domain)
             tax_ids |= other_taxes
+            
             line.update({
                 'tax_ids': [(6, None, [x.id for x in tax_ids if x])]
             })
@@ -63,93 +69,148 @@ class PosOrder(models.Model):
             for key, value in values.iteritems():
                 if value and key in line._fields:
                     line.update({key: value})
-        foo = self._prepare_edoc_vals(res)
-        eletronic = self.env['invoice.eletronic'].create(foo)
-        eletronic.action_post_validate()
+        
+        #foo = self._prepare_edoc_vals(res)
+        #eletronic = self.env['invoice.eletronic'].create(foo)
+        #eletronic.validate_invoice()
+        #eletronic.action_post_validate()
+        
         return res
+    
+    def _action_create_invoice_line(self, line=False, invoice_id=False):
+        InvoiceLine = self.env['account.invoice.line']
+        inv_name = line.product_id.name_get()[0][1]
+        #ncm = line.product_id.fiscal_classification_id
+        #res.lines.fiscal_classification_id = ncm.id
+        inv_line = {
+            'invoice_id': invoice_id,
+            'product_id': line.product_id.id,
+            'quantity': line.qty,
+            'account_analytic_id': self._prepare_analytic_account(line),
+            'name': inv_name, 
+        }
+        # Oldlin trick
+        invoice_line = InvoiceLine.sudo().new(inv_line)
+        invoice_line._onchange_product_id()
+        ncm = line.product_id.fiscal_classification_id
+        invoice_line.fiscal_classification_id = ncm.id
+        invoice_line.invoice_line_tax_ids = invoice_line.invoice_line_tax_ids.filtered(lambda t: t.company_id.id == line.order_id.company_id.id).ids
+        fiscal_position_id = line.order_id.fiscal_position_id
+        if fiscal_position_id:
+            invoice_line.invoice_line_tax_ids = fiscal_position_id.map_tax(invoice_line.invoice_line_tax_ids, line.product_id, line.order_id.partner_id)
+        invoice_line.invoice_line_tax_ids = invoice_line.invoice_line_tax_ids.ids
+        # We convert a new id object back to a dictionary to write to
+        # bridge between old and new api
+        inv_line = invoice_line._convert_to_write({name: invoice_line[name] for name in invoice_line._cache})
+        inv_line.update(price_unit=line.price_unit, discount=line.discount)
+        return InvoiceLine.sudo().create(inv_line)
+        
+    @api.multi
+    def _prepare_invoice(self):
+        """
+        Prepare the dict of values to create the new invoice for a pos order.
+        """
+        return {
+            #'name': self.name,
+            'origin': self.name,
+            'account_id': self.partner_id.property_account_receivable_id.id,
+            'journal_id': self.session_id.config_id.invoice_journal_id.id,
+            'type': 'out_invoice',
+            'reference': self.name,
+            'partner_id': self.partner_id.id,
+            'comment': self.note or '',
+            # considering partner's sale pricelist's currency
+            'currency_id': self.pricelist_id.currency_id.id,
+            'user_id': self.env.uid,
+            'metodo_pagamento': self.statement_ids[0].journal_id.metodo_pagamento
+        }
 
     def _prepare_edoc_item_vals(self, pos_line):
         vals = {
-            'name': pos_line.name,
-            'product_id': pos_line.product_id.id,
-            'tipo_produto': pos_line.product_id.fiscal_type,
-            'cfop': pos_line.cfop_id.code,
-            'cest': pos_line.product_id.cest or
-            pos_line.product_id.fiscal_classification_id.cest or '',
-            'uom_id': pos_line.product_id.uom_id.id,
-            'ncm': pos_line.product_id.fiscal_classification_id.code,
-            'quantidade': pos_line.qty,
-            'preco_unitario': pos_line.price_unit,
-            'valor_bruto': pos_line.price_subtotal_incl,
-            'valor_liquido': pos_line.price_subtotal,
-            'origem': pos_line.product_id.origin,
-            'tributos_estimados': (
-                pos_line.price_subtotal_incl - pos_line.price_subtotal
-            ),
+            #'name': pos_line.name,
+            #'product_id': pos_line.product_id.id,
+            #'tipo_produto': pos_line.product_id.fiscal_type,
+            #'cfop': pos_line.cfop_id.code,
+            #'cest': pos_line.product_id.cest or
+            #pos_line.product_id.fiscal_classification_id.cest or '',
+            #'uom_id': pos_line.product_id.uom_id.id,
+            #'ncm': pos_line.product_id.fiscal_classification_id.code,
+            #'quantidade': pos_line.qty,
+            #'preco_unitario': pos_line.price_unit,
+            #'valor_bruto': pos_line.price_subtotal_incl,
+            #'valor_liquido': pos_line.price_subtotal,
+            #'origem': pos_line.product_id.origin,
+            #'tributos_estimados': (
+            #    pos_line.price_subtotal_incl - pos_line.price_subtotal
+            #),
             # - ICMS -
-            'icms_cst': pos_line.icms_cst_normal,
-            'icms_aliquota': pos_line.aliquota_icms,
-            'icms_tipo_base': '3',
-            'icms_aliquota_reducao_base': pos_line.icms_aliquota_reducao_base,
-            'icms_base_calculo': pos_line.base_icms,
-            'icms_valor': pos_line.valor_icms,
+            #'icms_cst': pos_line.icms_cst_normal,
+            #'icms_aliquota': pos_line.aliquota_icms,
+            #'icms_tipo_base': '3',
+            #'icms_aliquota_reducao_base': pos_line.icms_aliquota_reducao_base,
+            #'icms_base_calculo': pos_line.base_icms,
+            #'icms_valor': pos_line.valor_icms,
             # - ICMS ST -
-            'icms_st_aliquota': 0,
-            'icms_st_aliquota_mva': 0,
-            'icms_st_aliquota_reducao_base': pos_line.\
-            icms_st_aliquota_reducao_base,
-            'icms_st_base_calculo': 0,
-            'icms_st_valor': 0,
+            #'icms_st_aliquota': 0,
+            #'icms_st_aliquota_mva': 0,
+            #'icms_st_aliquota_reducao_base': pos_line.\
+            #icms_st_aliquota_reducao_base,
+            #'icms_st_base_calculo': 0,
+            #'icms_st_valor': 0,
             # - Simples Nacional -
-            'icms_aliquota_credito': 0,
-            'icms_valor_credito': 0,
+            #'icms_aliquota_credito': 0,
+            #'icms_valor_credito': 0,
             # - II -
-            'ii_base_calculo': 0,
-            'ii_valor_despesas': 0,
-            'ii_valor': 0,
-            'ii_valor_iof': 0,
+            #'ii_base_calculo': 0,
+            #'ii_valor_despesas': 0,
+            #'ii_valor': 0,
+            #'ii_valor_iof': 0,
             # - PIS -
-            'pis_cst': pos_line.pis_cst,
-            'pis_aliquota': pos_line.aliquota_pis,
-            'pis_base_calculo': pos_line.base_pis,
-            'pis_valor': pos_line.valor_pis,
+            #'pis_cst': pos_line.pis_cst,
+            #'pis_aliquota': pos_line.aliquota_pis,
+            #'pis_base_calculo': pos_line.base_pis,
+            #'pis_valor': pos_line.valor_pis,
             # - COFINS -
-            'cofins_cst': pos_line.cofins_cst,
-            'cofins_aliquota': pos_line.aliquota_cofins,
-            'cofins_base_calculo': pos_line.base_cofins,
-            'cofins_valor': pos_line.valor_cofins,
+            #'cofins_cst': pos_line.cofins_cst,
+            #'cofins_aliquota': pos_line.aliquota_cofins,
+            #'cofins_base_calculo': pos_line.base_cofins,
+            #'cofins_valor': pos_line.valor_cofins,
             # - ISSQN -
-            'issqn_codigo': 0,
-            'issqn_aliquota': 0,
-            'issqn_base_calculo': 0,
-            'issqn_valor': 0,
-            'issqn_valor_retencao': 0.00,
+            #'issqn_codigo': 0,
+            #'issqn_aliquota': 0,
+            #'issqn_base_calculo': 0,
+            #'issqn_valor': 0,
+            #'issqn_valor_retencao': 0.00,
 
         }
         return vals
 
+    
+    
+    
     def _prepare_edoc_vals(self, pos):
         vals = {
-            'code': pos.sequence_number,
-            'name': u'Documento Eletrônico: nº %d' % pos.sequence_number,
-            'company_id': pos.company_id.id,
-            'state': 'draft',
-            'tipo_operacao': 'saida',
-            'model': '65',
-            'serie': pos.fiscal_position_id.nfe_serie.id,
-            'numero': pos.sequence_number,
-            'numero_controle': pos.numero_controle,
-            'numero_nfe': pos.sequence_number,
-            'data_emissao': datetime.now(),
-            'data_fatura': datetime.now(),
-            'finalidade_emissao': '1',
-            'partner_id': pos.partner_id.id,
-            'payment_term_id': None,
-            'fiscal_position_id': pos.fiscal_position_id.id,
-            'ind_final': pos.fiscal_position_id.ind_final,
-            'ind_pres': pos.fiscal_position_id.ind_pres,
-            'metodo_pagamento': pos.statement_ids[0].journal_id.
-            metodo_pagamento
+            #'code': pos.sequence_number,
+            #'name': u'Documento Eletrônico: nº %d' % pos.sequence_number,
+            #'company_id': pos.company_id.id,
+            #'state': 'draft',
+            #'tipo_operacao': 'saida',
+            #'model': '65',
+            #'serie': pos.fiscal_position_id.nfe_serie.id,
+            #'numero': pos.sequence_number,
+            #'numero_controle': pos.numero_controle,
+            #'numero_nfe': pos.sequence_number,
+            #'data_emissao': datetime.now(),
+            #'data_fatura': datetime.now(),
+            #'finalidade_emissao': '1',
+            #'partner_id': pos.partner_id.id,
+            #'payment_term_id': None,
+            #'fiscal_position_id': pos.fiscal_position_id.id,
+            #'ind_final': pos.fiscal_position_id.ind_final,
+            #'ind_pres': pos.fiscal_position_id.ind_pres,            
+            'metodo_pagamento': pos.statement_ids[0].journal_id.metodo_pagamento,
+            #'ambiente': 'homologacao' \
+            #if pos.company_id.tipo_ambiente == '2' else 'producao'
         }
 
         base_icms = 0
@@ -174,6 +235,7 @@ class PosOrder(models.Model):
         vals['valor_bc_icms'] = base_icms
         vals['valor_bc_icmsst'] = 0
         return vals
+
 
     @api.multi
     def _compute_total_edocs(self):
@@ -227,7 +289,7 @@ class PosOrder(models.Model):
 
 class PosOrderLine(models.Model):
     _inherit = 'pos.order.line'
-
+        
     def _prepare_tax_context(self):
         return {
             'icms_st_aliquota_mva': self.icms_st_aliquota_mva,
@@ -285,6 +347,8 @@ class PosOrderLine(models.Model):
                     taxes_ids, line.product_id,
                     line.order_id.partner_id)
             price = line.price_unit * (1 - (line.discount or 0.0) / 100.0)
+            #ncm = line.product_id.fiscal_classification_id
+            #line.fiscal_classification_id = ncm.id #line.product_id.fiscal_classification_id.code ncm
             taxes = {'taxes': []}
             if taxes_ids:
                 ctx = line._prepare_tax_context()
@@ -345,3 +409,5 @@ class PosOrderLine(models.Model):
     aliquota_icms = fields.Float()
     aliquota_pis = fields.Float()
     aliquota_cofins = fields.Float()
+    fiscal_classification_id = fields.Many2one(
+        'product.fiscal.classification', u'Classificação Fiscal', related='product_id.fiscal_classification_id')

@@ -42,5 +42,5 @@ class InvoiceEletronic(models.Model):
         }
         vals['codigo_seguranca'] = codigo_seguranca
         if self.model == '65':
-            vals['pagamento'] = self.metodo_pagamento
+            vals['pag'] = self.metodo_pagamento
         return vals
