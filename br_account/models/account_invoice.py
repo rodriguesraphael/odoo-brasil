@@ -3,7 +3,8 @@
 # © 2016 Danimar Ribeiro, Trustcode
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl.html).
 
-from odoo import api, fields, models
+from odoo import api, fields, models, _
+from odoo.exceptions import UserError
 from odoo.addons import decimal_precision as dp
 
 
@@ -27,16 +28,43 @@ class AccountInvoice(models.Model):
         self.valor_icms_uf_dest = sum(l.icms_uf_dest for l in lines)
         self.valor_icms_fcp_uf_dest = sum(l.icms_fcp_uf_dest for l in lines)
         self.issqn_base = sum(l.issqn_base_calculo for l in lines)
-        self.issqn_value = sum(l.issqn_valor for l in lines)
+        self.issqn_value = sum(abs(l.issqn_valor) for l in lines)
         self.ipi_base = sum(l.ipi_base_calculo for l in lines)
         self.ipi_value = sum(l.ipi_valor for l in lines)
         self.pis_base = sum(l.pis_base_calculo for l in lines)
-        self.pis_value = sum(l.pis_valor for l in lines)
+        self.pis_value = sum(abs(l.pis_valor) for l in lines)
         self.cofins_base = sum(l.cofins_base_calculo for l in lines)
-        self.cofins_value = sum(l.cofins_valor for l in lines)
+        self.cofins_value = sum(abs(l.cofins_valor) for l in lines)
         self.ii_value = sum(l.ii_valor for l in lines)
+        self.csll_base = sum(l.csll_base_calculo for l in lines)
+        self.csll_value = sum(abs(l.csll_valor) for l in lines)
+        self.irrf_base = sum(l.irrf_base_calculo for l in lines)
+        self.irrf_value = sum(abs(l.irrf_valor) for l in lines)
+        self.inss_base = sum(l.inss_base_calculo for l in lines)
+        self.inss_value = sum(abs(l.inss_valor) for l in lines)
+
+        # Retenções
+        self.issqn_retention = sum(
+            abs(l.issqn_valor) if l.issqn_valor < 0 else 0.0 for l in lines)
+        self.pis_retention = sum(
+            abs(l.pis_valor) if l.pis_valor < 0 else 0.0 for l in lines)
+        self.cofins_retention = sum(
+            abs(l.cofins_valor) if l.cofins_valor < 0 else 0.0 for l in lines)
+        self.csll_retention = sum(
+            abs(l.csll_valor) if l.csll_valor < 0 else 0 for l in lines)
+        self.irrf_retention = sum(
+            abs(l.irrf_valor) if l.irrf_valor < 0 else 0.0 for l in lines)
+        self.inss_retention = sum(
+            abs(l.inss_valor) if l.inss_valor < 0 else 0.0 for l in lines)
+
         self.total_bruto = sum(l.valor_bruto for l in lines)
         self.total_desconto = sum(l.valor_desconto for l in lines)
+        self.total_tributos_federais = sum(
+            l.tributos_estimados_federais for l in lines)
+        self.total_tributos_estaduais = sum(
+            l.tributos_estimados_estaduais for l in lines)
+        self.total_tributos_municipais = sum(
+            l.tributos_estimados_municipais for l in lines)
         self.total_tributos_estimados = sum(
             l.tributos_estimados for l in lines)
         # TOTAL
@@ -111,7 +139,7 @@ class AccountInvoice(models.Model):
         default=_default_fiscal_document)
     is_eletronic = fields.Boolean(
         related='fiscal_document_id.electronic', type='boolean',
-        store=True, string=u'Electrônico')
+        store=True, string=u'Eletrônico', readonly=True)
     fiscal_document_related_ids = fields.One2many(
         'br_account.document.related', 'invoice_id',
         'Documento Fiscal Relacionado', readonly=True,
@@ -158,6 +186,9 @@ class AccountInvoice(models.Model):
     issqn_value = fields.Float(
         string='Valor ISSQN', store=True,
         digits=dp.get_precision('Account'), compute='_compute_amount')
+    issqn_retention = fields.Float(
+        string='ISSQN Retido', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
     ipi_base = fields.Float(
         string='Base IPI', store=True, digits=dp.get_precision('Account'),
         compute='_compute_amount')
@@ -173,6 +204,9 @@ class AccountInvoice(models.Model):
     pis_value = fields.Float(
         string='Valor PIS', store=True,
         digits=dp.get_precision('Account'), compute='_compute_amount')
+    pis_retention = fields.Float(
+        string='PIS Retido', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
     cofins_base = fields.Float(
         string='Base COFINS', store=True,
         digits=dp.get_precision('Account'), compute='_compute_amount')
@@ -180,10 +214,55 @@ class AccountInvoice(models.Model):
         string='Valor COFINS', store=True,
         digits=dp.get_precision('Account'), compute='_compute_amount',
         readonly=True)
-    ii_value = fields.Float(
-        string='Valor II', store=True,
+    cofins_retention = fields.Float(
+        string='COFINS Retido', store=True,
         digits=dp.get_precision('Account'), compute='_compute_amount',
         readonly=True)
+    ii_value = fields.Float(
+        string='Valor II', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    csll_base = fields.Float(
+        string='Base CSLL', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    csll_value = fields.Float(
+        string='Valor CSLL', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    csll_retention = fields.Float(
+        string='CSLL Retido', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    irrf_base = fields.Float(
+        string='Base IRRF', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    irrf_value = fields.Float(
+        string='Valor IRRF', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    irrf_retention = fields.Float(
+        string='IRRF Retido', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    inss_base = fields.Float(
+        string='Base INSS', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    inss_value = fields.Float(
+        string='Valor INSS', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    inss_retention = fields.Float(
+        string='INSS Retido', store=True,
+        digits=dp.get_precision('Account'), compute='_compute_amount')
+    total_tributos_federais = fields.Float(
+        string='Total de Tributos Federais',
+        store=True,
+        digits=dp.get_precision('Account'),
+        compute='_compute_amount')
+    total_tributos_estaduais = fields.Float(
+        string='Total de Tributos Estaduais',
+        store=True,
+        digits=dp.get_precision('Account'),
+        compute='_compute_amount')
+    total_tributos_municipais = fields.Float(
+        string='Total de Tributos Municipais',
+        store=True,
+        digits=dp.get_precision('Account'),
+        compute='_compute_amount')
     total_tributos_estimados = fields.Float(
         string='Total de Tributos',
         store=True,
@@ -208,24 +287,56 @@ class AccountInvoice(models.Model):
             self.account_id = self.fiscal_position_id.account_id.id
         if self.fiscal_position_id and self.fiscal_position_id.journal_id:
             self.journal_id = self.fiscal_position_id.journal_id
-        if self.fiscal_position_id.fiscal_observation_ids:
-            self.fiscal_observation_ids |= \
-                self.fiscal_position_id.fiscal_observation_ids
+        ob_ids = [x.id for x in self.fiscal_position_id.fiscal_observation_ids]
+        self.fiscal_observation_ids = [(6, False, ob_ids)]
+
+    @api.multi
+    def action_invoice_cancel_paid(self):
+        if self.filtered(lambda inv: inv.state not in ['proforma2', 'draft',
+                                                       'open', 'paid']):
+            raise UserError(_("Invoice must be in draft, Pro-forma or open \
+                              state in order to be cancelled."))
+        return self.action_cancel()
 
     @api.model
     def invoice_line_move_line_get(self):
         res = super(AccountInvoice, self).invoice_line_move_line_get()
+
         contador = 0
+
         for line in self.invoice_line_ids:
-            res[contador]['price'] = line.price_total + line.price_tax
+            if line.quantity == 0:
+                continue
+            res[contador]['price'] = line.price_total
+
+            price = line.price_unit * (1 - (
+                line.discount or 0.0) / 100.0)
+
+            ctx = line._prepare_tax_context()
+            tax_ids = line.invoice_line_tax_ids.with_context(**ctx)
+
+            taxes_dict = tax_ids.compute_all(
+                price, self.currency_id, line.quantity,
+                product=line.product_id, partner=self.partner_id)
+
+            for tax in line.invoice_line_tax_ids:
+                tax_dict = next(
+                    x for x in taxes_dict['taxes'] if x['id'] == tax.id)
+                if not tax.price_include and tax.account_id:
+                    res[contador]['price'] += tax_dict['amount']
+                if tax.price_include and (not tax.account_id or
+                                          not tax.deduced_account_id):
+                    if tax_dict['amount'] > 0.0:  # Negativo é retido
+                        res[contador]['price'] -= tax_dict['amount']
+
             contador += 1
+
         return res
 
     @api.multi
     def finalize_invoice_move_lines(self, move_lines):
         res = super(AccountInvoice, self).\
             finalize_invoice_move_lines(move_lines)
-
         count = 1
         for invoice_line in res:
             line = invoice_line[2]
@@ -238,15 +349,34 @@ class AccountInvoice(models.Model):
 
     @api.multi
     def get_taxes_values(self):
+        tax_grouped = {}
         for line in self.invoice_line_ids:
             other_taxes = line.invoice_line_tax_ids.filtered(
                 lambda x: not x.domain)
             line.invoice_line_tax_ids = other_taxes | line.tax_icms_id | \
                 line.tax_ipi_id | line.tax_pis_id | line.tax_cofins_id | \
                 line.tax_issqn_id | line.tax_ii_id | line.tax_icms_st_id | \
-                line.tax_simples_id
+                line.tax_simples_id | line.tax_csll_id | line.tax_irrf_id | \
+                line.tax_inss_id
 
-        return super(AccountInvoice, self).get_taxes_values()
+            ctx = line._prepare_tax_context()
+            tax_ids = line.invoice_line_tax_ids.with_context(**ctx)
+
+            price_unit = line.price_unit * (1 - (line.discount or 0.0) / 100.0)
+            taxes = tax_ids.compute_all(
+                price_unit, self.currency_id, line.quantity,
+                line.product_id, self.partner_id)['taxes']
+            for tax in taxes:
+                val = self._prepare_tax_line_vals(line, tax)
+                key = self.env['account.tax'].browse(
+                    tax['id']).get_grouping_key(val)
+
+                if key not in tax_grouped:
+                    tax_grouped[key] = val
+                else:
+                    tax_grouped[key]['amount'] += val['amount']
+                    tax_grouped[key]['base'] += val['base']
+        return tax_grouped
 
     @api.model
     def tax_line_move_line_get(self):
@@ -262,9 +392,9 @@ class AccountInvoice(models.Model):
                     'tax_line_id': tax_line.tax_id.id,
                     'type': 'tax',
                     'name': tax_line.name,
-                    'price_unit': tax_line.amount*-1,
+                    'price_unit': tax_line.amount * -1,
                     'quantity': 1,
-                    'price': tax_line.amount*-1,
+                    'price': tax_line.amount * -1,
                     'account_id': tax_line.tax_id.deduced_account_id.id,
                     'account_analytic_id': tax_line.account_analytic_id.id,
                     'invoice_id': self.id,

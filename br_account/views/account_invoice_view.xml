@@ -84,7 +84,7 @@
                         </form>
                     </field>
                 </group>
-                <group string="Observações Fiscais">
+                <group string="Mensagens Documento Eletrônico">
                     <field name="fiscal_observation_ids" nolabel="1"/>
                 </group>
                 <group string="Observações">
@@ -108,6 +108,17 @@
         </field>
     </record>
 
+    <record id="view_br_account_invoice_cancel_form" model="ir.ui.view">
+        <field name="name">br_account.invoice.cancel.form</field>
+        <field name="model">account.invoice</field>
+        <field name="inherit_id" ref="account_cancel.invoice_form_cancel_inherit"/>
+        <field name="arch" type="xml">
+            <button name="action_invoice_cancel" position="replace">
+                <button name="action_invoice_cancel_paid" type="object" states="draft,proforma2,open,paid" string="Cancelar Fatura" groups="account.group_account_invoice"/>
+            </button>
+        </field>
+    </record>
+
     <record id="view_br_account_invoice_supplier_form" model="ir.ui.view">
         <field name="name">br_account.invoice.supplier.form</field>
         <field name="model">account.invoice</field>
@@ -128,6 +139,9 @@
                 <field name="document_serie_id" attrs="{'invisible': [('issuer','=', '0')]}" />
                 <field name="vendor_number" attrs="{'invisible': [('issuer','=', '1')]}" />
                 <field name="vendor_serie" attrs="{'invisible': [('issuer','=', '1')]}" />
+            </field>
+            <field name="payment_term_id" position="attributes">
+                <attribute name="attrs"></attribute>
             </field>
             <xpath expr="//field[@name='invoice_line_ids']/tree" position="attributes">
                 <attribute name="editable"></attribute>
@@ -178,6 +192,17 @@
         </field>
     </record>
 
+    <record id="view_br_account_invoice_supplier_cancel_form" model="ir.ui.view">
+        <field name="name">br_account.invoice.supplier.cancel.form</field>
+        <field name="model">account.invoice</field>
+        <field name="inherit_id" ref="account_cancel.invoice_supplier_cancel_form_inherit"/>
+        <field name="arch" type="xml">
+            <button name="action_invoice_cancel" position="replace">
+                <button name="action_invoice_cancel_paid" type="object" states="draft,proforma2,open,paid" string="Cancelar Fatura" groups="account.group_account_invoice"/>
+            </button>
+        </field>
+    </record>
+
     <!-- Invoice Line views -->
     <record model="ir.ui.view" id="br_account_product_invoice_line_tree">
         <field name="name">br_account_product.invoice.line.tree</field>
@@ -224,6 +249,9 @@
                                     <field name="company_id" groups="base.group_multi_company" readonly="1"/>
                                     <field name="invoice_line_tax_ids" invisible="1" />
                                     <field name="tax_simples_id" attrs="{'invisible': [('company_fiscal_type', '==', '3')] }" />
+                                    <field name="tributos_estimados_federais" />
+                                    <field name="tributos_estimados_estaduais" />
+                                    <field name="tributos_estimados_municipais" />
                                     <field name="tributos_estimados" />
                                     <field name="calculate_tax" invisible="1" />
                                 </group>
@@ -376,6 +404,33 @@
                                         </group>
                                     </form>
                                 </field>
+                            </group>
+                        </page>
+                        <page name="retencoes" string="Retenções" attrs="{'invisible': [('product_type','!=', 'service')]}">
+                            <group>
+                                <group string="CSLL">
+                                    <field name="csll_rule_id" />
+                                    <field name="csll_base_calculo"/>
+                                    <field name="tax_csll_id"/>
+                                    <field name="csll_aliquota" invisible="1" />
+                                    <field name="csll_valor"/>
+                                </group>
+                                <group string="IRRF">
+                                    <field name="irrf_rule_id" />
+                                    <field name="irrf_base_calculo"/>
+                                    <field name="tax_irrf_id"/>
+                                    <field name="irrf_aliquota" invisible="1" />
+                                    <field name="irrf_valor"/>
+                                </group>
+                            </group>
+                            <group>
+                                <group string="INSS">
+                                    <field name="inss_rule_id" />
+                                    <field name="inss_base_calculo"/>
+                                    <field name="tax_inss_id"/>
+                                    <field name="inss_aliquota" invisible="1" />
+                                    <field name="inss_valor"/>
+                                </group>
                             </group>
                         </page>
                     </notebook>

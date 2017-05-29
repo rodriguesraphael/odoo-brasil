@@ -154,14 +154,21 @@ class BrAccountCNAE(models.Model):
         [('view', u'Visualização'), ('normal', 'Normal')],
         'Tipo Interno', required=True, default='normal')
 
+    @api.model
+    def name_search(self, name, args=None, operator='ilike', limit=100):
+        args = args or []
+        recs = self.browse()
+        if name:
+            recs = self.search([('code', operator, name)] + args, limit=limit)
+        if not recs:
+            recs = self.search([('name', operator, name)] + args, limit=limit)
+        return recs.name_get()
+
     @api.multi
     def name_get(self):
         result = []
-        for record in self:
-            name = record['name']
-            if record['code']:
-                name = record['code'] + ' - ' + name
-            result.append((record['id'], name))
+        for rec in self:
+            result.append((rec.id, "%s - %s" % (rec.code, rec.name or '')))
         return result
 
 
@@ -312,10 +319,13 @@ class AccountDocumentRelated(models.Model):
 
 class BrAccountFiscalObservation(models.Model):
     _name = 'br_account.fiscal.observation'
-    _description = u'Observação Fiscal'
+    _description = u'Mensagen Documento Eletrônico'
     _order = 'sequence'
 
     sequence = fields.Integer(u'Sequência', default=1, required=True)
-    name = fields.Text(u'Descrição', required=True)
+    name = fields.Char(u'Descrição', required=True, size=50)
+    message = fields.Text(u'Mensagem', required=True)
+    tipo = fields.Selection([('fiscal', 'Observação Fiscal'),
+                             ('observacao', 'Observação')], string=u"Tipo")
     document_id = fields.Many2one(
         'br_account.fiscal.document', string="Documento Fiscal")
